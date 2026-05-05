@@ -1,0 +1,55 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  :root,
+  :root[data-theme="light"] {
+    /* Warm cream / terracotta — default */
+    --c-bg: 250 244 233;
+    --c-panel: 245 237 220;
+    --c-border: 224 210 187;
+    --c-fg: 60 47 33;
+    --c-muted: 138 116 89;
+    --c-accent: 192 87 59;
+    --c-ok: 90 138 73;
+    --c-bad: 184 64 50;
+    --c-grid: 224 210 187;
+  }
+
+  :root[data-theme="dark"] {
+    --c-bg: 11 13 16;
+    --c-panel: 20 23 28;
+    --c-border: 34 40 49;
+    --c-fg: 226 232 240;
+    --c-muted: 139 149 161;
+    --c-accent: 94 234 212;
+    --c-ok: 34 197 94;
+    --c-bad: 239 68 68;
+    --c-grid: 34 40 49;
+  }
+
+  html,
+  body,
+  #root {
+    @apply h-full;
+  }
+  body {
+    @apply bg-bg text-fg font-sans antialiased;
+  }
+}
+
+@layer components {
+  .panel {
+    @apply bg-panel border border-border rounded-lg;
+  }
+  .stat {
+    @apply text-xs uppercase tracking-wider text-muted;
+  }
+  .pnl-pos {
+    @apply text-ok;
+  }
+  .pnl-neg {
+    @apply text-bad;
+  }
+}

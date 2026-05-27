@@ -101,9 +101,13 @@ def run_snapshot(db: Session, client: MoomooClient) -> int:
 # ----- helpers -----
 
 def _upsert_legs(db: Session, raw_legs: list[RawLeg]) -> None:
+    # A leg's stable identity is its option_symbol (the moomoo contract code). An
+    # account nets to a single position per contract, whereas moomoo's
+    # position_id is NOT stable across sessions — matching on it would create a
+    # fresh leg (and a duplicate spread) every time the id rotates.
     for r in raw_legs:
         existing = db.scalar(
-            select(OptionLeg).where(OptionLeg.moomoo_position_id == r.moomoo_position_id)
+            select(OptionLeg).where(OptionLeg.option_symbol == r.option_symbol)
         )
         if existing is None:
             db.add(
@@ -120,6 +124,7 @@ def _upsert_legs(db: Session, raw_legs: list[RawLeg]) -> None:
                 )
             )
         else:
+            existing.moomoo_position_id = r.moomoo_position_id
             existing.quantity = r.quantity
             existing.closed_at = None
             if existing.entry_price is None and r.entry_price is not None:

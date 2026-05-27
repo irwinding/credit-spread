@@ -167,6 +167,61 @@ def test_legs_endpoint(client):
     assert len(ungrouped) == 1
 
 
+def test_changed_position_id_does_not_duplicate_spread(client):
+    """moomoo's position_id is not stable across sessions; the same contract may
+    come back with a new position_id. A leg's identity is its option_symbol, so a
+    snapshot must update the existing leg rather than create a duplicate spread."""
+    fake = client.fake
+    short = RawLeg(
+        moomoo_position_id="pid_short_v1",
+        underlying="SPY",
+        option_symbol="US.SPY260619P00100000",
+        option_type="PUT",
+        strike=Decimal("100"),
+        expiry=date(2026, 6, 19),
+        quantity=-1,
+        entry_price=Decimal("2.50"),
+        entry_at=None,
+    )
+    long = RawLeg(
+        moomoo_position_id="pid_long_v1",
+        underlying="SPY",
+        option_symbol="US.SPY260619P00095000",
+        option_type="PUT",
+        strike=Decimal("95"),
+        expiry=date(2026, 6, 19),
+        quantity=1,
+        entry_price=Decimal("1.20"),
+        entry_at=None,
+    )
+    fake.legs = [short, long]
+    fake.quotes = {
+        "US.SPY260619P00100000": Quote(
+            "US.SPY260619P00100000", Decimal("0.40"), Decimal("0.50"), Decimal("0.45")
+        ),
+        "US.SPY260619P00095000": Quote(
+            "US.SPY260619P00095000", Decimal("0.10"), Decimal("0.20"), Decimal("0.15")
+        ),
+    }
+    fake.underlying_prices = {"SPY": Decimal("110.50")}
+
+    client.post("/snapshot/run")
+    assert len(client.get("/spreads").json()) == 1
+    assert len(client.get("/legs").json()) == 2
+
+    # Same contracts, new position_ids (e.g. a new trading day / reconnect).
+    fake.legs = [
+        RawLeg(**{**short.__dict__, "moomoo_position_id": "pid_short_v2"}),
+        RawLeg(**{**long.__dict__, "moomoo_position_id": "pid_long_v2"}),
+    ]
+    client.post("/snapshot/run")
+
+    spreads = client.get("/spreads").json()
+    assert len(spreads) == 1, f"expected 1 spread, got {len(spreads)}"
+    legs = client.get("/legs").json()
+    assert len(legs) == 2, f"expected 2 legs, got {len(legs)}"
+
+
 def test_user_locked_spread_persists_through_snapshot(client):
     fake = client.fake
     fake.legs = [

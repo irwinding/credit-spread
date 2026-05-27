@@ -54,7 +54,7 @@ class OptionLeg(Base):
     id: Mapped[int] = mapped_column(BigIntPK, primary_key=True, autoincrement=True)
     moomoo_position_id: Mapped[str] = mapped_column(String(64), unique=True, nullable=False)
     underlying: Mapped[str] = mapped_column(String(16), nullable=False)
-    option_symbol: Mapped[str] = mapped_column(String(64), nullable=False)
+    option_symbol: Mapped[str] = mapped_column(String(64), unique=True, nullable=False)
     option_type: Mapped[str] = mapped_column(String(4), nullable=False)  # CALL|PUT
     strike: Mapped[Decimal] = mapped_column(Numeric(14, 4), nullable=False)
     expiry: Mapped[date] = mapped_column(Date, nullable=False)

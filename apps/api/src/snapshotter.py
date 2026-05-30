@@ -14,6 +14,7 @@ from .moomoo_client import MoomooClient, Quote, RawLeg
 from .spread_detector import LegInput, detect_spreads
 
 logger = logging.getLogger(__name__)
+HELD_TO_EXPIRY = "HELD_TO_EXPIRY"
 
 
 def run_snapshot(db: Session, client: MoomooClient) -> int:
@@ -41,37 +42,37 @@ def run_snapshot(db: Session, client: MoomooClient) -> int:
     _upsert_auto_spreads(db, detected)
     db.flush()
 
-    rows_written = 0
     ts = datetime.now(timezone.utc)
+    rows_written = _close_expired_positions(db, client, ts)
+    db.flush()
 
     open_spreads = db.scalars(select(Spread).where(Spread.closed_at.is_(None))).all()
+    open_legs = db.scalars(select(OptionLeg).where(OptionLeg.closed_at.is_(None))).all()
 
-    # Fetch each unique option symbol once per run.
+    # Fetch each unique option symbol once per run, including ungrouped legs.
     quote_cache: dict[str, Quote] = {}
-    for spread in open_spreads:
-        for leg in spread.legs:
-            if leg.option_symbol in quote_cache:
-                continue
-            try:
-                quote_cache[leg.option_symbol] = client.get_quote(leg.option_symbol)
-            except Exception as exc:  # noqa: BLE001
-                logger.warning("get_quote failed for %s: %s", leg.option_symbol, exc)
+    for leg in open_legs:
+        if leg.option_symbol in quote_cache:
+            continue
+        try:
+            quote_cache[leg.option_symbol] = client.get_quote(leg.option_symbol)
+        except Exception as exc:  # noqa: BLE001
+            logger.warning("get_quote failed for %s: %s", leg.option_symbol, exc)
 
     # Persist per-leg snapshots from the cached quotes.
-    for spread in open_spreads:
-        for leg in spread.legs:
-            q = quote_cache.get(leg.option_symbol)
-            if q is None or q.mid is None:
-                continue
-            db.merge(
-                LegSnapshot(
-                    leg_id=leg.id,
-                    ts=ts,
-                    bid=q.bid,
-                    ask=q.ask,
-                    mid=q.mid,
-                )
+    for leg in open_legs:
+        q = quote_cache.get(leg.option_symbol)
+        if q is None or q.mid is None:
+            continue
+        db.merge(
+            LegSnapshot(
+                leg_id=leg.id,
+                ts=ts,
+                bid=q.bid,
+                ask=q.ask,
+                mid=q.mid,
             )
+        )
 
     for spread in open_spreads:
         if not spread.legs:
@@ -127,6 +128,7 @@ def _upsert_legs(db: Session, raw_legs: list[RawLeg]) -> None:
             existing.moomoo_position_id = r.moomoo_position_id
             existing.quantity = r.quantity
             existing.closed_at = None
+            existing.close_reason = None
             if existing.entry_price is None and r.entry_price is not None:
                 existing.entry_price = r.entry_price
 
@@ -183,11 +185,112 @@ def _upsert_auto_spreads(db: Session, detected) -> None:
             spread.long_strike = d.long_strike
             spread.width = d.width
             spread.quantity = d.quantity
+            spread.closed_at = None
+            spread.close_reason = None
             if spread.net_credit is None:
                 spread.net_credit = d.net_credit
 
         for leg in leg_objs:
             leg.spread_id = spread.id
+            leg.closed_at = None
+            leg.close_reason = None
+
+
+def _close_expired_positions(db: Session, client: MoomooClient, ts: datetime) -> int:
+    today = ts.date()
+    rows_written = 0
+    underlying_cache: dict[str, Decimal] = {}
+
+    expired_spreads = db.scalars(
+        select(Spread).where(Spread.closed_at.is_(None), Spread.expiry < today)
+    ).all()
+    for spread in expired_spreads:
+        try:
+            und_price = _underlying_price(client, spread.underlying, underlying_cache)
+            mark, pnl = _compute_marks_at_expiry(spread, und_price)
+        except Exception as exc:  # noqa: BLE001
+            logger.warning("expiry cleanup failed for spread %s: %s", spread.id, exc)
+            continue
+
+        db.merge(
+            SpreadSnapshot(
+                spread_id=spread.id,
+                ts=ts,
+                spread_mark=mark,
+                pnl_unrealised=pnl,
+                underlying_price=und_price,
+            )
+        )
+        spread.closed_at = ts
+        spread.close_reason = HELD_TO_EXPIRY
+        for leg in spread.legs:
+            _close_leg_at_expiry(db, leg, und_price, ts)
+        rows_written += 1
+
+    expired_ungrouped_legs = db.scalars(
+        select(OptionLeg).where(
+            OptionLeg.closed_at.is_(None),
+            OptionLeg.spread_id.is_(None),
+            OptionLeg.expiry < today,
+        )
+    ).all()
+    for leg in expired_ungrouped_legs:
+        try:
+            und_price = _underlying_price(client, leg.underlying, underlying_cache)
+        except Exception as exc:  # noqa: BLE001
+            logger.warning("expiry cleanup failed for leg %s: %s", leg.id, exc)
+            continue
+        _close_leg_at_expiry(db, leg, und_price, ts)
+
+    return rows_written
+
+
+def _underlying_price(
+    client: MoomooClient,
+    underlying: str,
+    cache: dict[str, Decimal],
+) -> Decimal:
+    if underlying not in cache:
+        cache[underlying] = client.get_underlying_price(underlying)
+    return cache[underlying]
+
+
+def _close_leg_at_expiry(
+    db: Session,
+    leg: OptionLeg,
+    underlying_price: Decimal,
+    ts: datetime,
+) -> None:
+    mid = _intrinsic_value(leg, underlying_price)
+    db.merge(
+        LegSnapshot(
+            leg_id=leg.id,
+            ts=ts,
+            bid=mid,
+            ask=mid,
+            mid=mid,
+        )
+    )
+    leg.closed_at = ts
+    leg.close_reason = HELD_TO_EXPIRY
+
+
+def _compute_marks_at_expiry(spread: Spread, underlying_price: Decimal) -> tuple[Decimal, Decimal]:
+    total_value_per_share = Decimal(0)
+    total_pnl_per_share = Decimal(0)
+    for leg in spread.legs:
+        mid = _intrinsic_value(leg, underlying_price)
+        total_value_per_share += Decimal(leg.quantity) * mid
+        if leg.entry_price is not None:
+            total_pnl_per_share += Decimal(leg.quantity) * (mid - leg.entry_price)
+
+    return -total_value_per_share, total_pnl_per_share * Decimal(100)
+
+
+def _intrinsic_value(leg: OptionLeg, underlying_price: Decimal) -> Decimal:
+    if leg.option_type == "CALL":
+        return max(Decimal(0), underlying_price - leg.strike)
+    return max(Decimal(0), leg.strike - underlying_price)
 
 
 def _compute_marks(

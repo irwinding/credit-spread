@@ -12,10 +12,24 @@ export interface Leg {
   quantity: number;
   entry_price: string | null;
   spread_id: string | null;
+  closed_at: string | null;
+  close_reason: string | null;
   last_mark: string | null;
   last_bid: string | null;
   last_ask: string | null;
   last_mark_ts: string | null;
+}
+
+export interface LegSnapshotPoint {
+  ts: string;
+  bid: string | null;
+  ask: string | null;
+  mid: string;
+}
+
+export interface LegHistory {
+  leg_id: number;
+  points: LegSnapshotPoint[];
 }
 
 export interface Spread {
@@ -31,6 +45,7 @@ export interface Spread {
   stop_loss_pct: string | null;
   opened_at: string | null;
   closed_at: string | null;
+  close_reason: string | null;
   detection_mode: DetectionMode;
   user_locked: boolean;
   legs: Leg[];

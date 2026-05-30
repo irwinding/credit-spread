@@ -45,6 +45,7 @@ export function SnapshotCountdown() {
     queueMicrotask(() => {
       qc.invalidateQueries({ queryKey: ["snapshotStatus"] });
       qc.invalidateQueries({ queryKey: ["spreads"] });
+      qc.invalidateQueries({ queryKey: ["legs"] });
     });
   }
 

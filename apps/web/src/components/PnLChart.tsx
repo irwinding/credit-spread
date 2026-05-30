@@ -7,6 +7,7 @@ import { readCssVarRgb } from "../lib/theme";
 interface Props {
   points: SnapshotPoint[];
   underlying: string;
+  secondaryLabel?: string;
 }
 
 function readPalette() {
@@ -20,7 +21,7 @@ function readPalette() {
   };
 }
 
-export function PnLChart({ points, underlying }: Props) {
+export function PnLChart({ points, underlying, secondaryLabel }: Props) {
   const [palette, setPalette] = useState(readPalette);
 
   useEffect(() => {
@@ -35,6 +36,7 @@ export function PnLChart({ points, underlying }: Props) {
   const x = points.map((p) => p.ts);
   const pnl = points.map((p) => Number(p.pnl_unrealised));
   const px = points.map((p) => Number(p.underlying_price));
+  const secondary = secondaryLabel ?? `${underlying} price`;
 
   return (
     <Plot
@@ -54,10 +56,10 @@ export function PnLChart({ points, underlying }: Props) {
           y: px,
           type: "scatter",
           mode: "lines",
-          name: `${underlying} price`,
+          name: secondary,
           line: { color: palette.muted, width: 1.5, dash: "dot" },
           yaxis: "y2",
-          hovertemplate: `${underlying}: $%{y:.2f}<extra></extra>`,
+          hovertemplate: `${secondary}: $%{y:.2f}<extra></extra>`,
         },
       ]}
       layout={{
@@ -74,7 +76,7 @@ export function PnLChart({ points, underlying }: Props) {
           zerolinecolor: palette.border,
         },
         yaxis2: {
-          title: { text: `${underlying} ($)` },
+          title: { text: `${secondary} ($)` },
           overlaying: "y",
           side: "right",
           gridcolor: "transparent",

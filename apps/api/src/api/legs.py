@@ -25,8 +25,14 @@ def _attach_latest_mark(db: Session, leg: OptionLeg) -> OptionLeg:
 
 
 @router.get("", response_model=list[LegOut])
-def list_legs(ungrouped_only: bool = False, db: Session = Depends(get_db)):
+def list_legs(
+    ungrouped_only: bool = False,
+    include_closed: bool = False,
+    db: Session = Depends(get_db),
+):
     stmt = select(OptionLeg).order_by(OptionLeg.expiry.asc(), OptionLeg.strike.asc())
+    if not include_closed:
+        stmt = stmt.where(OptionLeg.closed_at.is_(None))
     if ungrouped_only:
         stmt = stmt.where(OptionLeg.spread_id.is_(None))
     legs = db.scalars(stmt).all()

@@ -18,6 +18,15 @@ export function formatSpreadType(t: string): string {
   }
 }
 
+export function formatCloseReason(reason: string | null): string {
+  switch (reason) {
+    case "HELD_TO_EXPIRY":
+      return "Held to expiry";
+    default:
+      return reason ?? "Closed";
+  }
+}
+
 export function daysUntil(dateIso: string): number {
   const today = new Date();
   today.setHours(0, 0, 0, 0);

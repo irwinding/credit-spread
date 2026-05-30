@@ -1,6 +1,6 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useEffect, useState } from "react";
-import { Link, useParams } from "react-router-dom";
+import { Link, useLocation, useParams } from "react-router-dom";
 
 import { api } from "../api/client";
 import { LegList } from "../components/LegList";
@@ -9,6 +9,7 @@ import { daysUntil, fmtMoney, formatSpreadType } from "../lib/format";
 
 export function SpreadDetail() {
   const { id } = useParams<{ id: string }>();
+  const location = useLocation();
   const qc = useQueryClient();
 
   const { data: spread } = useQuery({
@@ -48,6 +49,11 @@ export function SpreadDetail() {
   const pnlNum = latest ? Number(latest.pnl_unrealised) : null;
   const netCreditNum =
     spread.net_credit != null ? Number(spread.net_credit) : null;
+  const backTarget = detailBackTarget(
+    location.state,
+    "/spreads",
+    "Vertical spreads",
+  );
 
   const submitStop = () => {
     const trimmed = stopInput.trim();
@@ -62,8 +68,8 @@ export function SpreadDetail() {
 
   return (
     <div className="space-y-6">
-      <Link to="/" className="text-sm text-muted hover:text-fg">
-        ← Dashboard
+      <Link to={backTarget.from} className="text-sm text-muted hover:text-fg">
+        ← {backTarget.label}
       </Link>
 
       <div className="flex items-baseline justify-between">
@@ -159,6 +165,24 @@ export function SpreadDetail() {
       </div>
     </div>
   );
+}
+
+function detailBackTarget(
+  state: unknown,
+  fallbackFrom: string,
+  fallbackLabel: string,
+) {
+  if (
+    state &&
+    typeof state === "object" &&
+    "from" in state &&
+    "label" in state &&
+    typeof state.from === "string" &&
+    typeof state.label === "string"
+  ) {
+    return { from: state.from, label: state.label };
+  }
+  return { from: fallbackFrom, label: fallbackLabel };
 }
 
 function Field({ label, value }: { label: string; value: string }) {

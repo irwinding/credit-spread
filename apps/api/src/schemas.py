@@ -22,6 +22,8 @@ class LegOut(BaseModel):
     quantity: int
     entry_price: Decimal | None
     spread_id: uuid.UUID | None
+    closed_at: datetime | None = None
+    close_reason: str | None = None
     last_mark: Decimal | None = None
     last_bid: Decimal | None = None
     last_ask: Decimal | None = None
@@ -55,6 +57,7 @@ class SpreadOut(BaseModel):
     stop_loss_pct: Decimal | None
     opened_at: datetime | None
     closed_at: datetime | None
+    close_reason: str | None
     detection_mode: str
     user_locked: bool
     legs: list[LegOut] = []

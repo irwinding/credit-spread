@@ -1,7 +1,7 @@
 import { Link } from "react-router-dom";
 
 import type { Spread } from "../api/types";
-import { fmtMoney, formatSpreadType, daysUntil } from "../lib/format";
+import { fmtMoney, formatCloseReason, formatSpreadType, daysUntil } from "../lib/format";
 
 interface Props {
   spread: Spread;
@@ -19,6 +19,7 @@ export function SpreadCard({ spread }: Props) {
   return (
     <Link
       to={`/spread/${spread.id}`}
+      state={{ from: "/spreads", label: "Vertical spreads" }}
       className="panel p-4 block hover:border-accent transition"
     >
       <div className="flex items-baseline justify-between">
@@ -57,6 +58,9 @@ export function SpreadCard({ spread }: Props) {
         )}
         {spread.stop_loss_breached && (
           <span className="text-red-400">stop loss breached</span>
+        )}
+        {spread.closed_at && (
+          <span className="text-muted">{formatCloseReason(spread.close_reason)}</span>
         )}
       </div>
     </Link>

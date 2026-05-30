@@ -39,6 +39,7 @@ class Spread(Base):
     stop_loss_pct: Mapped[Decimal | None] = mapped_column(Numeric(8, 2))
     opened_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     closed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    close_reason: Mapped[str | None] = mapped_column(String(32))
     detection_mode: Mapped[str] = mapped_column(String(8), default="AUTO")  # AUTO|MANUAL
     user_locked: Mapped[bool] = mapped_column(Boolean, default=False)
 
@@ -62,6 +63,7 @@ class OptionLeg(Base):
     entry_price: Mapped[Decimal | None] = mapped_column(Numeric(14, 4))
     entry_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     closed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    close_reason: Mapped[str | None] = mapped_column(String(32))
 
     spread_id: Mapped[uuid.UUID | None] = mapped_column(
         Uuid(), ForeignKey("spreads.id", ondelete="SET NULL")

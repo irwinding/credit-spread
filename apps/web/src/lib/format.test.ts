@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { daysUntil, fmtMoney, formatSpreadType } from "./format";
+import { daysUntil, fmtMoney, formatCloseReason, formatSpreadType } from "./format";
 
 describe("fmtMoney", () => {
   it("formats positive values with a leading +", () => {
@@ -11,6 +11,12 @@ describe("fmtMoney", () => {
   });
   it("formats zero without a sign", () => {
     expect(fmtMoney(0)).toBe("$0.00");
+  });
+});
+
+describe("formatCloseReason", () => {
+  it("humanises held-to-expiry closures", () => {
+    expect(formatCloseReason("HELD_TO_EXPIRY")).toBe("Held to expiry");
   });
 });
 

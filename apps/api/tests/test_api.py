@@ -166,6 +166,13 @@ def test_legs_endpoint(client):
     ungrouped = client.get("/legs?ungrouped_only=true").json()
     assert len(ungrouped) == 1
 
+    history = client.get(f"/legs/{legs[0]['id']}/history").json()
+    assert len(history["points"]) == 1
+    assert Decimal(history["points"][0]["mid"]) == Decimal("2.9500")
+
+    status = client.get("/snapshot/status").json()
+    assert status["last_snapshot_at"] is not None
+
 
 def test_changed_position_id_does_not_duplicate_spread(client):
     """moomoo's position_id is not stable across sessions; the same contract may
@@ -271,3 +278,55 @@ def test_user_locked_spread_persists_through_snapshot(client):
     spreads_after = client.get("/spreads").json()
     assert len(spreads_after) == 1
     assert spreads_after[0]["id"] == auto_id
+
+
+def test_snapshot_closes_expired_spread_as_held_to_expiry(client):
+    fake = client.fake
+    fake.legs = [
+        RawLeg(
+            moomoo_position_id="expired_short",
+            underlying="META",
+            option_symbol="US.META200117P00100000",
+            option_type="PUT",
+            strike=Decimal("100"),
+            expiry=date(2020, 1, 17),
+            quantity=-1,
+            entry_price=Decimal("2.50"),
+            entry_at=None,
+        ),
+        RawLeg(
+            moomoo_position_id="expired_long",
+            underlying="META",
+            option_symbol="US.META200117P00095000",
+            option_type="PUT",
+            strike=Decimal("95"),
+            expiry=date(2020, 1, 17),
+            quantity=1,
+            entry_price=Decimal("1.20"),
+            entry_at=None,
+        ),
+    ]
+    fake.quotes = {}
+    fake.underlying_prices = {"META": Decimal("110")}
+
+    r = client.post("/snapshot/run")
+    assert r.status_code == 200, r.text
+    assert r.json()["rows_written"] == 1
+
+    assert client.get("/spreads").json() == []
+
+    closed = client.get("/spreads?include_closed=true").json()
+    assert len(closed) == 1
+    spread = closed[0]
+    assert spread["closed_at"] is not None
+    assert spread["close_reason"] == "HELD_TO_EXPIRY"
+    assert Decimal(spread["last_pnl"]) == Decimal("130.0000")
+
+    history = client.get(f"/spreads/{spread['id']}/history").json()
+    assert len(history["points"]) == 1
+    assert Decimal(history["points"][0]["spread_mark"]) == Decimal("0.0000")
+
+    assert client.get("/legs").json() == []
+    closed_legs = client.get("/legs?include_closed=true").json()
+    assert len(closed_legs) == 2
+    assert {leg["close_reason"] for leg in closed_legs} == {"HELD_TO_EXPIRY"}

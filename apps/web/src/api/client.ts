@@ -1,5 +1,6 @@
 import type {
   Leg,
+  LegHistory,
   SnapshotResult,
   SnapshotStatus,
   Spread,
@@ -29,8 +30,11 @@ export const api = {
   getSpread: (id: string) => request<Spread>(`/spreads/${id}`),
   getHistory: (id: string) => request<SpreadHistory>(`/spreads/${id}/history`),
 
-  listLegs: (ungroupedOnly = false) =>
-    request<Leg[]>(`/legs?ungrouped_only=${ungroupedOnly}`),
+  listLegs: (ungroupedOnly = false, includeClosed = false) =>
+    request<Leg[]>(
+      `/legs?ungrouped_only=${ungroupedOnly}&include_closed=${includeClosed}`,
+    ),
+  getLegHistory: (id: number) => request<LegHistory>(`/legs/${id}/history`),
 
   createSpread: (legPositionIds: string[]) =>
     request<Spread>(`/spreads`, {

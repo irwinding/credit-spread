@@ -5,7 +5,7 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from ..db import get_db
-from ..models import SpreadSnapshot
+from ..models import LegSnapshot, SpreadSnapshot
 from ..schemas import SnapshotResult, SnapshotStatus
 from ..snapshotter import run_snapshot
 
@@ -30,7 +30,13 @@ def snapshot_status(request: Request, db: Session = Depends(get_db)):
         if job is not None and job.next_run_time is not None:
             next_run_at = job.next_run_time.astimezone(timezone.utc)
 
-    last_ts = db.scalar(select(SpreadSnapshot.ts).order_by(SpreadSnapshot.ts.desc()).limit(1))
+    last_spread_ts = db.scalar(
+        select(SpreadSnapshot.ts).order_by(SpreadSnapshot.ts.desc()).limit(1)
+    )
+    last_leg_ts = db.scalar(
+        select(LegSnapshot.ts).order_by(LegSnapshot.ts.desc()).limit(1)
+    )
+    last_ts = max((ts for ts in (last_spread_ts, last_leg_ts) if ts is not None), default=None)
     return SnapshotStatus(
         next_run_at=next_run_at,
         last_snapshot_at=last_ts,
